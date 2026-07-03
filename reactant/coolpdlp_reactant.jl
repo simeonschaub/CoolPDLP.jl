@@ -241,10 +241,11 @@ begin
 end
 
 using GPUToolbox: i32
+using MinimumCostFlows: One, Zero
 
 function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerColPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
     i = (blockIdx().x - 1i32) * blockDim().x + threadIdx().x
-    @inbounds @fastmath begin
+    @inbounds @fastmath if i <= length(c) ÷ 2
 		ptr = reinterpret(Core.LLVMPtr{NTuple{4, Base.VecElement{I}}, AS.Global}, pointer(colidx))
 		j = SIMD.Vec(CUDA.unsafe_cached_load(ptr, i))
         vals = vgathera((pointer(b, 0i32)) + j * Int32(sizeof(T)))
@@ -261,14 +262,16 @@ end
 function LinearAlgebra.mul!(c::CuVector{T}, A::Matrix2PerColPM, b::CuVector{T}, α::Number, β::Number) where {T <: Number}
     α_is_one = isone(α)
     β_is_zero = iszero(β)
+	threads = 768
+	blocks = cld(length(c) ÷ 2, threads)
     if α_is_one && β_is_zero
-        two_per_col_spmv!(c, A, b, One(), Zero(); ndrange = length(c))
+        @cuda threads=threads blocks=blocks two_per_col_spmv!(c, A, b, One(), Zero())
     elseif α_is_one
-        two_per_col_spmv!(c, A, b, One(), β; ndrange = length(c))
+        @cuda threads=threads blocks=blocks two_per_col_spmv!(c, A, b, One(), β)
     elseif β_is_zero
-        two_per_col_spmv!(c, A, b, α, Zero(); ndrange = length(c))
+        @cuda threads=threads blocks=blocks two_per_col_spmv!(c, A, b, α, Zero())
     else
-        two_per_col_spmv!(c, A, b, α, β; ndrange = length(c))
+        @cuda threads=threads blocks=blocks two_per_col_spmv!(c, A, b, α, β)
     end
     return c
 end

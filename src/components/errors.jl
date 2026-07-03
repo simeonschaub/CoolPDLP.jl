@@ -52,6 +52,20 @@ function KKTErrors(::Type{T}) where {T}
     )
 end
 
+function Base.convert(
+        ::Type{CoolPDLP.KKTErrors{T}},
+        (; primal, primal_scale, dual, dual_scale, gap, gap_scale)::CoolPDLP.KKTErrors
+    ) where {T}
+    return CoolPDLP.KKTErrors{T}(
+        convert(T, primal),
+        convert(T, primal_scale),
+        convert(T, dual),
+        convert(T, dual_scale),
+        convert(T, gap),
+        convert(T, gap_scale),
+    )
+end
+
 function relative(err::KKTErrors)
     (; primal, primal_scale, dual, dual_scale, gap, gap_scale) = err
     return max(primal / primal_scale, dual / dual_scale, gap / gap_scale)

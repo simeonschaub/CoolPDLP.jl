@@ -137,7 +137,7 @@ function Reactant.TracedLinearAlgebra.overloaded_mul!(
 end
 
 # ╔═╡ 33cb78ab-82eb-4b46-ac0e-934f7cfb3430
-prob = read_dimacs_mcf("/home/simeon.schaub/test5.dimacs")
+prob = read_dimacs_mcf("/home/simeon.schaub/test5.dimacs", NativeMCFProblem{Int32, Int32})
 
 (; g, supply, cap_lo, cap_hi, cost) = prob
 
@@ -191,7 +191,7 @@ b_test = rand(500000)
 SparseMatrixCSC{Int8}(JDSMatrixPM([2, -1, 3, -4, 3], Base.OneTo(4), [1, 4, 6], 3))
 
 # ╔═╡ 84d1b460-330d-44fa-8c62-de1df60dc6ee
-A_lp, l = construct_constraint_matrix(prob);
+A_lp, l = construct_constraint_matrix(prob, Float32);
 
 u = copy(l)
 
@@ -238,6 +238,39 @@ begin
 	KernelAbstractions.get_backend(::JAXSparseMatrixCSR) = MyReactantBackend()
 	KernelAbstractions.allocate(::MyReactantBackend, T::Type, size::Tuple) = ConcreteRArray{T}(undef, size...)
 	Reactant.@reactant_overlay KernelAbstractions.allocate(::MyReactantBackend, ::Type{Reactant.TracedRNumber{T}}, size::NTuple{N}) where {T, N} = Reactant.TracedRArray{T, N}((), nothing, size)
+end
+
+using GPUToolbox: i32
+
+function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerColPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
+    i = (blockIdx().x - 1i32) * blockDim().x + threadIdx().x
+    @inbounds @fastmath begin
+		ptr = reinterpret(Core.LLVMPtr{NTuple{4, Base.VecElement{I}}, AS.Global}, pointer(colidx))
+		j = SIMD.Vec(CUDA.unsafe_cached_load(ptr, i))
+        vals = vgathera((pointer(b, 0i32)) + j * Int32(sizeof(T)))
+		a = shufflevector(vals, Val((0, 1)))
+		sa = sum(SIMD.Vec{2, T}((1, -1)) * a)
+        c[i] = α * sa + β * c[i]
+		b = shufflevector(vals, Val((2, 3)))
+        sb = sum(SIMD.Vec{2, T}((1, -1)) * b)
+        c[i + 1i32] = α * sb + β * c[i + 1i32]
+    end
+	return nothing
+end
+
+function LinearAlgebra.mul!(c::CuVector{T}, A::Matrix2PerColPM, b::CuVector{T}, α::Number, β::Number) where {T <: Number}
+    α_is_one = isone(α)
+    β_is_zero = iszero(β)
+    if α_is_one && β_is_zero
+        two_per_col_spmv!(c, A, b, One(), Zero(); ndrange = length(c))
+    elseif α_is_one
+        two_per_col_spmv!(c, A, b, One(), β; ndrange = length(c))
+    elseif β_is_zero
+        two_per_col_spmv!(c, A, b, α, Zero(); ndrange = length(c))
+    else
+        two_per_col_spmv!(c, A, b, α, β; ndrange = length(c))
+    end
+    return c
 end
 
 # ╔═╡ f2833b6b-9d13-4068-ae52-beea8e6ffec0

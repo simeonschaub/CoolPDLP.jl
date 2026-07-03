@@ -1,3 +1,5 @@
+module CoolPDLPReactantExt
+
 using Reactant, CoolPDLP, LinearAlgebra, KernelAbstractions, Adapt
 
 CoolPDLP.fixed_stepsize(milp::MILP{<:Number, <:ConcreteRArray}, params::CoolPDLP.StepSizeParameters) = CoolPDLP.fixed_stepsize(adapt(CUDABackend(), milp), params)
@@ -139,7 +141,7 @@ function CoolPDLP.primal_weight_update!(
 end
 
 function LinearAlgebra.axpby!(
-        α::Reactant.TracedRNumber, x::TracedRArray{T}, β::Reactant.TracedRNumber, y::TracedRArray{T}
+        α::Reactant.TracedRNumber, x::Reactant.TracedRArray{T}, β::Reactant.TracedRNumber, y::Reactant.TracedRArray{T}
     ) where {T}
     if length(x) != length(y)
         throw(
@@ -151,9 +153,11 @@ function LinearAlgebra.axpby!(
     T1 = Reactant.unwrapped_eltype(T)
     α = Reactant.promote_to(Reactant.TracedRNumber{T1}, α)
     β = Reactant.promote_to(Reactant.TracedRNumber{T1}, β)
-    ax = @opcall multiply(x, Reactant.broadcast_to_size(α, size(x)))
-    by = @opcall multiply(y, Reactant.broadcast_to_size(β, size(y)))
+    ax = Reactant.@opcall multiply(x, Reactant.broadcast_to_size(α, size(x)))
+    by = Reactant.@opcall multiply(y, Reactant.broadcast_to_size(β, size(y)))
 
-    set_mlir_data!(y, get_mlir_data(@opcall add(ax, by)))
+    Reactant.set_mlir_data!(y, Reactant.get_mlir_data(Reactant.@opcall add(ax, by)))
     return y
+end
+
 end

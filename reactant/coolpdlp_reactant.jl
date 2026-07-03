@@ -44,27 +44,6 @@ b = Reactant.to_rarray(CUDA.rand(10000))
 # ╔═╡ a8eccc79-51d1-4034-86cf-a593389007c6
 x = Reactant.to_rarray(CuArray{Float32}(undef, 10000))
 
-# ╔═╡ 3ad1cb2b-1c8d-4500-882b-852972427926
-# ╠═╡ disabled = true
-#=╠═╡
-Reactant.TracedUtils.get_ancestor_and_indices_inner(::CoolPDLP.GPUSparseMatrixCSR{Reactant.TracedRNumber{Float32}, Reactant.TracedRNumber{Int64}, Reactant.TracedRArray{Float32, 1}, Reactant.TracedRArray{Int64, 1}}, ::Base.OneTo{Int64}, ::Base.OneTo{Int64}) = error()
-  ╠═╡ =#
-
-# ╔═╡ 725500c4-ae2d-47fc-a44d-a14e9417d322
-Reactant.use_overlayed_version(::GPUSparseMatrixCSR) = false
-
-# ╔═╡ 687ee5af-479a-4976-9ba8-fafd77b33707
-# ╠═╡ disabled = true
-#=╠═╡
-f = Reactant.@code_hlo raise = true mul!(x, A, b, Reactant.ConcreteRNumber(1f0), Reactant.ConcreteRNumber(0f0))
-  ╠═╡ =#
-
-# ╔═╡ 1f26e113-a8dd-411d-9a79-9ece6e542c16
-# ╠═╡ disabled = true
-#=╠═╡
-@device_code_typed mul!(x, A, b, 1f0, 0f0)
-  ╠═╡ =#
-
 # ╔═╡ 5440bbb5-d146-4b19-8bbd-976ddbf94499
 @pyexec """
 global jax, _spmv
@@ -142,18 +121,6 @@ function LinearAlgebra.mul!(
     return c .= @jit Reactant.TracedLinearAlgebra.overloaded_mul!(c, A, b, α, β)
 end
 
-# ╔═╡ cb3f97c7-3ecc-44ca-9efd-a71c951bf891
-begin
-	struct One <: Number end
-	Base.:*(::One, x::Number) = x
-	Base.FastMath.mul_fast(::One, x::Number) = x
-	struct Zero <: Number end
-	Base.:*(::Zero, ::Number) = Zero()
-	Base.FastMath.mul_fast(::Zero, ::Number) = Zero()
-	Base.:+(x::Number, ::Zero) = x
-	Base.FastMath.add_fast(x::Number, ::Zero) = x
-end
-
 # ╔═╡ 9b9c9631-fe6c-47b5-9106-226ecc94861a
 function Reactant.TracedLinearAlgebra.overloaded_mul!(
         c::AbstractVector,
@@ -186,132 +153,12 @@ function Reactant.TracedLinearAlgebra.overloaded_mul!(
     return c
 end
 
-# ╔═╡ 3d0c7357-0557-4ee6-82a0-92ce02b3b5e0
-function read_dimacs_mcf(filename)
-    open(filename) do io
-        local n, m, supply
-        local src, dst, lo, hi, cost
-
-        arc_idx = 0
-
-        for line in eachline(io)
-            isempty(line) && continue
-            parts = split(line)
-            c = parts[1]
-            c == "c" && continue
-
-            if c == "p"
-                n = parse(Int, parts[3])
-                m = parse(Int, parts[4])
-                supply = zeros(Int, n)
-                src    = Vector{Int}(undef, m)
-                dst    = Vector{Int}(undef, m)
-                lo     = Vector{Int}(undef, m)
-                hi     = Vector{Int}(undef, m)
-                cost   = Vector{Int}(undef, m)
-
-            elseif c == "n"
-                supply[parse(Int, parts[2])] = parse(Int, parts[3])
-
-            elseif c == "a"
-                arc_idx += 1
-                src[arc_idx]  = parse(Int, parts[2])
-                dst[arc_idx]  = parse(Int, parts[3])
-                lo[arc_idx]   = parse(Int, parts[4])
-                hi[arc_idx]   = parse(Int, parts[5])
-                cost[arc_idx] = parse(Int, parts[6])
-            end
-        end
-
-        adj = sparse(src, dst, trues(arc_idx), n, n)
-        g           = DiGraph(adj)
-        capacity_lo = sparse(src, dst, lo,   n, n)
-        capacity_hi = sparse(src, dst, hi,   n, n)
-        cost_mat    = sparse(src, dst, cost, n, n)
-
-        return g, supply, capacity_lo, capacity_hi, cost_mat
-    end
-end
-
 # ╔═╡ 33cb78ab-82eb-4b46-ac0e-934f7cfb3430
-g, supply, cap_lo, cap_hi, cost = read_dimacs_mcf("/home/simeon/Downloads/test5.dimacs")
+prob = read_dimacs_mcf("/home/simeon/Downloads/test5.dimacs")
 
-# ╔═╡ 186d9701-ee32-427f-b358-f946c5116ab4
-begin
-	struct JDSMatrixPM{I, R <: AbstractVector, V1 <: AbstractVector{I}, V2 <: AbstractVector{I}} <: AbstractSparseMatrix{Int8, I}
-		colidx::V1
-		row::R
-		iterptr::V2
-		nrows::Int
-	end
-	Base.size((; row, nrows)::JDSMatrixPM) = (nrows, length(row))
-	function SparseMatrixCSC{T}((; colidx, row, iterptr, nrows)::JDSMatrixPM{TI}) where {T, TI}
-		I, J, V = Vector{TI}(undef, length(colidx)), Vector{TI}(undef, length(colidx)), Vector{T}(undef, length(colidx))
-		i = 1
-		ptr = 1
-		for j in 1:(length(iterptr) - 1)
-			while ptr < iterptr[j + 1]
-				I[i] = row[ptr - iterptr[j] + 1]
-				k = colidx[ptr]
-				J[i] = abs(k)
-				V[i] = ifelse(k < 0, T(-1), T(1))
-				i += 1
-				ptr += 1
-			end
-		end
-		return sparse(I, J, V, nrows, length(row))
-	end
-	Adapt.adapt_structure(to, (; colidx, row, iterptr, nrows)::JDSMatrixPM) = JDSMatrixPM(adapt(to, colidx), adapt(to, row), adapt(to, iterptr), nrows)
-end
+(; g, supply, cap_lo, cap_hi, cost) = prob
 
-# ╔═╡ d4113e89-2dce-458e-b67d-6dd7ae7bb81b
-begin
-	struct Matrix2PerColPM{I, M <: AbstractMatrix{I}} <: AbstractSparseMatrix{Int8, I}
-		colidx::M
-		ncols::Int
-	end
-	Base.size((; colidx, ncols)::Matrix2PerColPM) = (size(colidx, 2), ncols)
-	function SparseMatrixCSC{T}((; colidx, ncols)::Matrix2PerColPM{TI}) where {T, TI}
-		I, J, V = TI[], TI[], T[]
-		for i in axes(colidx, 2)
-			if colidx[1, i] > 0
-				push!(I, i)
-				push!(J, colidx[1, i])
-				push!(V, T(1))
-			end
-			if colidx[2, i] > 0
-				push!(I, i)
-				push!(J, colidx[2, i])
-				push!(V, T(-1))
-			end
-		end
-		return sparse(I, J, V, size(colidx, 2), ncols)
-	end
-	Adapt.adapt_structure(to, (; colidx, ncols)::Matrix2PerColPM) = Matrix2PerColPM(adapt(to, colidx), ncols)
-	function Matrix2PerColPM(A::LinearAlgebra.AdjOrTrans{Int8, <:JDSMatrixPM{T}}) where {T}
-		(; colidx, row, iterptr, nrows) = parent(A)
-		colidx′ = fill!(similar(colidx, 2, size(A, 1)), zero(T))
-		i = 1
-		ptr = 1
-		for j in 1:(length(iterptr) - 1)
-			while ptr < iterptr[j + 1]
-				I = row[ptr - iterptr[j] + 1]
-				k = colidx[ptr]
-				J = abs(k)
-				if k < 0
-					@assert colidx′[2, J] == 0
-					colidx′[2, J] = I
-				else
-					@assert colidx′[1, J] == 0
-					colidx′[1, J] = I
-				end
-				i += 1
-				ptr += 1
-			end
-		end
-		return Matrix2PerColPM(colidx′, nrows)
-	end
-end
+using MinimumCostFlows: JDSMatrixPM, Matrix2PerColPM, construct_constraint_matrix
 
 # ╔═╡ c0b1c4e0-4d2b-47ca-b5a8-e8dc16e0ef22
 A = Reactant.to_rarray(CoolPDLP.GPUSparseMatrixCSR(SparseMatrixCSC{Float32, Int32}(sprand(Float32, 10000, 10000, .001))));
@@ -354,24 +201,6 @@ function Reactant.TracedLinearAlgebra.overloaded_mul!(
     return c
 end
 
-# ╔═╡ daa38713-fc22-4d8c-b831-4a224c142585
-@kernel function jds_spmv!(c::AbstractVector{T}, (; colidx, row, iterptr)::JDSMatrixPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I}
-	i = @index(Global)
-	@inbounds #=@fastmath=# begin
-		s = zero(T)
-		j = 1
-		ptr = i
-		while j < length(iterptr) && ptr < iterptr[j + 1]
-			k = colidx[ptr]
-			bₖ = b[abs(k)]
-			s += ifelse(k < 0, -bₖ, bₖ)
-			ptr = i + iterptr[j += 1] - 1
-		end
-		l = row[Base.unsafe_trunc(I, i)]
-		c[l] = α * s + β * c[l]
-	end
-end
-
 # ╔═╡ bab6dd21-9fe0-463d-a6c0-9bc35b3f13ce
 b_test = rand(500000)
 
@@ -379,46 +208,9 @@ b_test = rand(500000)
 SparseMatrixCSC{Int8}(JDSMatrixPM([2, -1, 3, -4, 3], Base.OneTo(4), [1, 4, 6], 3))
 
 # ╔═╡ 84d1b460-330d-44fa-8c62-de1df60dc6ee
-A_lp, l, u = let n = nnz(cap_lo), supply = supply
-	l, u = Float32.(supply), Float32.(supply)
+A_lp, l = construct_constraint_matrix(prob)
 
-	adj = Bool.(adjacency_matrix(g))
-	global I, J, _ = findnz(adj)
-	adjᵀ = permutedims(sparse(I, J, 1:n, nv(g), nv(g)))
-
-	rows = Vector{Int32}[]
-	nnz = 0
-
-	for i in vertices(g)
-		row = Int32[view(nonzeros(adjᵀ), nzrange(adjᵀ, i)); -nzrange(adj, i)]
-		push!(rows, row)
-		nnz += length(row)
-	end
-
-	idx = sortperm(rows; by = length, rev = true)
-	colidx = Vector{Int32}(undef, nnz)
-	iterptr = Vector{Int32}(undef, length(rows[idx[1]]) + 1)
-	iterptr[1] = 1
-	k = 0
-	for j in eachindex(rows[idx[1]])
-		i = 1
-		row = rows[idx[i]]
-		while j ≤ length(row)
-			colidx[k += 1] = row[j]
-			i += 1
-			i ≤ length(rows) || break
-			row = rows[idx[i]]
-		end
-		iterptr[j + 1] = k + 1
-	end
-	@assert k == nnz
-	#colidx = reduce(vcat, view(rows, idx))
-	#iterptr = pushfirst!(accumulate(+, Int32(length(rows[i])) for i in idx; init = Int32(1)), Int32(1))
-
-	A = JDSMatrixPM(colidx, Base.OneTo(Int32(n)), iterptr, length(rows))
-
-	A, l[idx], u[idx]
-end
+u = copy(l)
 
 # ╔═╡ dc79b95b-9b4e-4d1c-a46b-b4b87bd29273
 A_lpt = Matrix2PerColPM(A_lp');

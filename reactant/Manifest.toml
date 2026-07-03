@@ -127,9 +127,9 @@ version = "6.2.0"
 
 [[deps.CUDA_Compiler_jll]]
 deps = ["Artifacts", "CUDA_Driver_jll", "CUDA_Runtime_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
-git-tree-sha1 = "6ca8941cec33550807f849ffc566492db6ede90d"
+git-tree-sha1 = "c32d22f2f563ce192c88a44b09c2b569f1e7a980"
 uuid = "d1e2174e-dfdc-576e-b43e-73b79eb1aca8"
-version = "0.4.4+0"
+version = "0.4.4+1"
 
 [[deps.CUDA_Driver_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "TOML"]
@@ -145,9 +145,9 @@ version = "2.1.0"
 
 [[deps.CUDA_Runtime_jll]]
 deps = ["Artifacts", "CUDA_Driver_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
-git-tree-sha1 = "a648a4cb5c2e5ae8bf2f6ff1f6985f4c6ede2e8d"
+git-tree-sha1 = "2e0352eb2a8321e46e1de54059bed9be8fd9391c"
 uuid = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
-version = "0.23.0+0"
+version = "0.23.0+1"
 
 [[deps.CUPTI]]
 deps = ["CEnum", "CUDACore", "CUDA_Runtime_Discovery", "CUDA_Runtime_jll", "GPUToolbox"]
@@ -312,9 +312,9 @@ version = "1.0.7"
 
 [[deps.Enzyme]]
 deps = ["CEnum", "EnzymeCore", "Enzyme_jll", "GPUCompiler", "InteractiveUtils", "LLVM", "Libdl", "LinearAlgebra", "ObjectFile", "PrecompileTools", "Preferences", "Printf", "Random", "SparseArrays"]
-git-tree-sha1 = "31b44f3b7e29d09546f1836b1808e545c2e688f5"
+git-tree-sha1 = "1d1fafadef3cc57d18d61f3d9e1971e1542011d3"
 uuid = "7da242da-08ed-463a-9acd-ee780be4f1d9"
-version = "0.13.172"
+version = "0.13.173"
 
     [deps.Enzyme.extensions]
     EnzymeBFloat16sExt = "BFloat16s"
@@ -334,9 +334,9 @@ version = "0.13.172"
     StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [[deps.EnzymeCore]]
-git-tree-sha1 = "c6ee69ee502060982d12dbaaf3d8fcb4e835a0d1"
+git-tree-sha1 = "971d7831cc85f43bc9f51d615a3f7f21270c2f1d"
 uuid = "f151be2c-9106-41f4-ab19-57ee4f262869"
-version = "0.8.20"
+version = "0.8.21"
 
     [deps.EnzymeCore.extensions]
     AdaptExt = "Adapt"
@@ -514,9 +514,9 @@ version = "1.12.0"
 
 [[deps.KernelAbstractions]]
 deps = ["Adapt", "Atomix", "InteractiveUtils", "MacroTools", "PrecompileTools", "Requires", "StaticArrays", "UUIDs"]
-git-tree-sha1 = "f2e76d3ced51a2a9e185abc0b97494c7273f649f"
+git-tree-sha1 = "a5b87110fa95d711355af44832497745aa93fb52"
 uuid = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
-version = "0.9.41"
+version = "0.9.42"
 weakdeps = ["EnzymeCore", "LinearAlgebra", "SparseArrays"]
 
     [deps.KernelAbstractions.extensions]
@@ -672,10 +672,14 @@ uuid = "0b3b1443-0f03-428d-bdfb-f27f9c1191ea"
 version = "0.1.15"
 
 [[deps.MinimumCostFlows]]
-deps = ["AutoHashEquals", "Graphs", "JuMP", "LEMONGraphs", "LEMON_jll", "SparseArrays"]
+deps = ["Adapt", "AutoHashEquals", "Graphs", "JuMP", "KernelAbstractions", "LEMONGraphs", "LEMON_jll", "LinearAlgebra", "SparseArrays"]
 path = "../../MinimumCostFlows"
 uuid = "045fb0ea-6897-4186-8301-f65f7e556b4f"
 version = "1.0.0-DEV"
+weakdeps = ["Reactant"]
+
+    [deps.MinimumCostFlows.extensions]
+    ReactantExt = ["Reactant"]
 
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
@@ -865,9 +869,9 @@ version = "1.6.0"
 
 [[deps.Reactant]]
 deps = ["Adapt", "BFloat16s", "CEnum", "Crayons", "Downloads", "EnumX", "Enzyme", "EnzymeCore", "FileWatching", "Functors", "GPUArraysCore", "GPUCompiler", "JSON", "LLVM", "LLVMOpenMP_jll", "Libdl", "LinearAlgebra", "OrderedCollections", "PrecompileTools", "Preferences", "PrettyTables", "ProtoBuf", "Random", "ReactantCore", "Reactant_jll", "ScopedValues", "Scratch", "Serialization", "Setfield", "Sockets", "StableRNGs", "StructUtils", "StyledStrings", "UUIDs", "p7zip_jll"]
-git-tree-sha1 = "0f774b5aab9383bc09f2466b52055173a0cc068d"
+git-tree-sha1 = "637680abd7ea8bd755990fba7933cde04e6df046"
 uuid = "3c362404-f566-11ee-1572-e11a4b42c853"
-version = "0.2.269"
+version = "0.2.270"
 
     [deps.Reactant.extensions]
     ReactantAbstractFFTsExt = "AbstractFFTs"
@@ -937,9 +941,9 @@ version = "0.1.20"
 
 [[deps.Reactant_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "LazyArtifacts", "Libdl", "TOML"]
-git-tree-sha1 = "55bf67103f94eb6d59e46b3d75dc7d98533737df"
+git-tree-sha1 = "51dbac6a561d88515eb722508fe61cfbfb01f7a6"
 uuid = "0192cb87-2b54-54ad-80e0-3be72ad8a3c0"
-version = "0.0.387+0"
+version = "0.0.391+1"
 
 [[deps.RecipesBase]]
 deps = ["PrecompileTools"]

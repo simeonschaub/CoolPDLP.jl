@@ -1,0 +1,49 @@
+[deps]
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+CoolPDLP = "9e90bdc5-3073-4e0f-a275-e19f28ac1b53"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+KernelAbstractions = "63c18a36-062a-441e-b654-da1e3ab1ce7c"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+MinimumCostFlows = "045fb0ea-6897-4186-8301-f65f7e556b4f"
+Preferences = "21216c6a-2e73-6563-6e65-726566657250"
+PythonCall = "6099a3de-0909-46bc-b1f4-468b9a2dfc0d"
+Reactant = "3c362404-f566-11ee-1572-e11a4b42c853"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+SIMD = "fdea26ae-647d-5447-a871-4b548cad5224"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+cuSPARSE = "b26da814-b3bc-49ef-b0ee-c816305aa060"
+
+[sources]
+CoolPDLP = {path = ".."}
+
+[compat]
+Adapt = "~4.7.0"
+CUDA = "~6.2.0"
+CoolPDLP = "~0.1.2"
+Graphs = "~1.14.0"
+KernelAbstractions = "~0.9.41"
+Preferences = "~1.5.2"
+PythonCall = "~0.9.35"
+Reactant = "~0.2.269"
+Revise = "~3.15.1"
+SIMD = "~3.7.2"
+cuSPARSE = "~6.2.0"
+
+[extras]
+CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
+Reactant_jll = "0192cb87-2b54-54ad-80e0-3be72ad8a3c0"
+
+[preferences.CUDA_Runtime_jll]
+version = "13.1"
+__clear__ = ["local"]
+
+[preferences.CoolPDLP]
+dispatch_doctor_mode = "disable"
+
+[preferences.Reactant_jll]
+gpu = "cuda"
+gpu_version = "13.1"
+
+[preferences.Revise]
+revise_structs = true

@@ -142,7 +142,7 @@ prob = read_dimacs_mcf("/home/simeon.schaub/test5.dimacs", NativeMCFProblem{Int3
 
 (; g, supply, cap_lo, cap_hi, cost) = prob
 
-using MinimumCostFlows: JDSMatrixPM, Matrix2PerColPM, construct_constraint_matrix
+using MinimumCostFlows: JDSMatrixPM, Matrix2PerRowPM, Matrix2PerRow, construct_constraint_matrix
 
 # ╔═╡ c0b1c4e0-4d2b-47ca-b5a8-e8dc16e0ef22
 A = Reactant.to_rarray(CoolPDLP.GPUSparseMatrixCSR(SparseMatrixCSC{Float32, Int32}(sprand(Float32, 10000, 10000, .001))));
@@ -197,7 +197,7 @@ A_lp, l = construct_constraint_matrix(prob, Float32);
 u = copy(l)
 
 # ╔═╡ dc79b95b-9b4e-4d1c-a46b-b4b87bd29273
-A_lpt = Matrix2PerColPM(A_lp');
+A_lpt = Matrix2PerRowPM(A_lp');
 
 # ╔═╡ a1930dc4-b211-4827-82c0-8e7f6cf2146e
 SparseMatrixCSC{Int8}(A_lp)
@@ -244,23 +244,42 @@ end
 using GPUToolbox: i32
 using MinimumCostFlows: One, Zero
 
-function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerColPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
+function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerRowPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
     i = (blockIdx().x - 1i32) * blockDim().x + threadIdx().x
     @inbounds @fastmath if i <= length(c) ÷ 2
 		ptr = reinterpret(Core.LLVMPtr{NTuple{4, Base.VecElement{I}}, AS.Global}, pointer(colidx))
 		j = SIMD.Vec(CUDA.unsafe_cached_load(ptr, i))
-        vals = vgathera((pointer(b, 0i32)) + j * Int32(sizeof(T)))
-		a = shufflevector(vals, Val((0, 1)))
-		sa = sum(SIMD.Vec{2, T}((1, -1)) * a)
-        c[i] = α * sa + β * c[i]
-		b = shufflevector(vals, Val((2, 3)))
-        sb = sum(SIMD.Vec{2, T}((1, -1)) * b)
-        c[i + 1i32] = α * sb + β * c[i + 1i32]
+        bⱼ = vgathera((pointer(b, 0i32)) + j * Int32(sizeof(T)))
+
+		l = shufflevector(bⱼ, Val((0, 1)))
+		sl = sum(SIMD.Vec{2, T}((1, -1)) * l)
+        c[i] = α * sl + β * c[i]
+		u = shufflevector(bⱼ, Val((2, 3)))
+        su = sum(SIMD.Vec{2, T}((1, -1)) * u)
+        c[i + 1i32] = α * su + β * c[i + 1i32]
     end
 	return nothing
 end
 
-function LinearAlgebra.mul!(c::CuVector{T}, A::Matrix2PerColPM, b::CuVector{T}, α::Number, β::Number) where {T <: Number}
+function two_per_col_spmv!(c::AbstractVector{T}, (; colidx, vals)::Matrix2PerRow{T, I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
+    i = (blockIdx().x - 1i32) * blockDim().x + threadIdx().x
+    @inbounds @fastmath if i <= length(c) ÷ 2
+		ptr = reinterpret(Core.LLVMPtr{NTuple{4, Base.VecElement{I}}, AS.Global}, pointer(colidx))
+		j = SIMD.Vec(CUDA.unsafe_cached_load(ptr, i))
+        bⱼ = vgathera((pointer(b, 0i32)) + j * Int32(sizeof(T)))
+		val_ptr = reinterpret(Core.LLVMPtr{NTuple{4, Base.VecElement{T}}, AS.Global}, pointer(vals))
+		val = SIMD.Vec(CUDA.unsafe_cached_load(val_ptr, i))
+		prod = val * bⱼ
+
+		sl = sum(shufflevector(prod, Val((0, 1))))
+        c[i] = α * sl + β * c[i]
+		su = sum(shufflevector(prod, Val((2, 3))))
+        c[i + 1i32] = α * su + β * c[i + 1i32]
+    end
+	return nothing
+end
+
+function LinearAlgebra.mul!(c::CuVector{T}, A::Union{Matrix2PerRow{T, I}, Matrix2PerRowPM{I}}, b::CuVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
     α_is_one = isone(α)
     β_is_zero = iszero(β)
 	threads = 768
@@ -412,7 +431,7 @@ begin
 end
 
 # ╔═╡ 74795c63-5dd5-4722-b559-16bb4da653de
-CoolPDLP.spectral_norm(K::JDSMatrixPM, Kᵀ::Matrix2PerColPM) = CoolPDLP.spectral_norm(SparseMatrixCSC{Float32}(adapt(CPU(), K)), SparseMatrixCSC{Float32}(adapt(CPU(), Kᵀ)))
+CoolPDLP.spectral_norm(K::JDSMatrixPM, Kᵀ::Matrix2PerRowPM) = CoolPDLP.spectral_norm(SparseMatrixCSC{Float32}(adapt(CPU(), K)), SparseMatrixCSC{Float32}(adapt(CPU(), Kᵀ)))
 
 # ╔═╡ 8cda099c-9629-4fcd-9e15-ea93b8a92571
 solve(milp, PDLP(
@@ -443,7 +462,7 @@ Preferences.set_preferences!(Revise, "revise_structs" => true; export_prefs = tr
 # ╔═╡ 7e56368c-77b1-4f06-be57-ad59efdeb142
 # ╠═╡ disabled = true
 #=╠═╡
-@kernel function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerColPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
+@kernel function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerRowPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
 	i = @index(Global)
 	@inbounds #=@fastmath=# begin
 		j = vload(SIMD.Vec{2, I}, pointer(colidx, 2i - 1))
@@ -455,7 +474,7 @@ end
   ╠═╡ =#
 
 # ╔═╡ 9f5cbe3c-6882-43d6-a69e-b8595ff13a3a
-@kernel function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerColPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
+@kernel function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerRowPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
 	i = @index(Global)
 	@inbounds #=@fastmath=# begin
 		s = zero(T)

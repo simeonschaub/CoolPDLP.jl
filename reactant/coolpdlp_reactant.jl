@@ -89,6 +89,7 @@ KernelAbstractions.get_backend((; nzval)::JAXSparseMatrixCSR) = get_backend(nzva
 
 # ╔═╡ ed3f004f-afa4-4fbf-bebd-4c35e50b3fc1
 Adapt.adapt_storage(b::CUDABackend, (; colval, rowptr, nzval, m, n)::JAXSparseMatrixCSR) = CuSparseMatrixCSR(adapt(b, rowptr), adapt(b, colval), adapt(b, nzval), (m, n))
+Adapt.adapt_storage(b::CPU, (; colval, rowptr, nzval, m, n)::JAXSparseMatrixCSR) = permutedims(SparseMatrixCSC(n, m, adapt(b, rowptr), adapt(b, colval), adapt(b, nzval)))
 
 # ╔═╡ b2e7ada9-a0bc-4fa4-b9cf-98a0a4d6eddf
 Reactant.use_overlayed_version(::JAXSparseMatrixCSR) = false
@@ -367,31 +368,6 @@ let b = b_test
 	mul!(similar(b, 100000), A_lp, b, 1.0, 0.0), mul!(similar(b, 100000), SparseMatrixCSC{Float64}(A_lp), b, 1.0, 0.0)
 end
 
-# ╔═╡ ebcb36b8-e124-4482-93c1-1584130575dd
-function Reactant.TracedLinearAlgebra.overloaded_mul!(
-        c::AbstractVector,
-        A::Matrix2PerColPM,
-        b::AbstractVector,
-        α::Number,
-        β::Number
-    )
-    Reactant.call_with_reactant(c, A, b, α, β) do c, A, b, α, β
-    	backend = get_backend(c)
-    	α_is_one = !(α isa Reactant.TracedRNumber) && isone(α)
-		β_is_zero = !(β isa Reactant.TracedRNumber) && iszero(β)
-		if α_is_one && β_is_zero
-			two_per_col_spmv!(backend)(c, A, b, One(), Zero(); ndrange = length(c))
-		elseif α_is_one
-			two_per_col_spmv!(backend)(c, A, b, One(), β; ndrange = length(c))
-		elseif β_is_zero
-			two_per_col_spmv!(backend)(c, A, b, α, Zero(); ndrange = length(c))
-		else
-			two_per_col_spmv!(backend)(c, A, b, α, β; ndrange = length(c))
-		end
-    	return c
-    end
-end
-
 # ╔═╡ 7650a412-5113-445e-82ec-84e15b41f3aa
 sol, stats = solve(milp, PDLP(
     Float32,  # desired float type
@@ -411,9 +387,10 @@ begin
             c, lv, uv, A, At, lc, uc, D1, D2,
             int_var, var_names, dataset, name, path,
         ) = milp
-        A_M = A_lp
-        At_M = A_lpt
-        backend = MyReactantBackend()
+        A_M = adapt(CUDABackend(), A_lp)
+        At_M = adapt(CUDABackend(), A_lpt)
+        #backend = MyReactantBackend()
+        backend = CUDABackend()
 
         return MILP(;
             c = adapt(backend, c),
@@ -442,76 +419,20 @@ solve(milp, PDLP(
     Float32,  # desired float type
     Int32,  # desired int type
     Foo,  # GPU sparse matrix type
-    backend = MyReactantBackend(),
+    backend = CUDABackend(),
     time_limit = 100.0,#00.0,
-    #max_kkt_passes = 10^6,
-    termination_reltol = 1e-6,
+    max_kkt_passes = 10^6,
+    termination_reltol = 1e-4,
 ))
-
-# ╔═╡ 9bf727d6-5601-4668-814a-d0b7266da1d4
-function _step!(state, milp, η, η_sum, ω)
-	# switch pointers
-	#state.sol, state.sol_last = state.sol_last, state.sol
-
-	(; sol, sol_last, sol_avg, sol_avg_last, step_sizes, scratch) = state
-	(; x, y) = sol_last
-	#(; η, ω) = step_sizes
-	(; c, lv, uv, A, At, lc, uc) = milp
-
-	τ, σ = η / ω, η * ω
-
-	# xp = clamp.(x - τ * (c - At * y), lv, uv)
-	At_y = mul!(scratch.x, At, y)
-	@. sol.x = clamp(x - τ * (c - At_y), lv, uv)
-	xdiff = @. scratch.x = 2sol.x - x
-
-	# yp = y - σ * A * (2xp - x) - σ * clamp.(inv(σ) * y - A * (2xp - x), -uc, -lc)
-	A_xdiff = mul!(scratch.y, A, xdiff)
-	@. sol.y = y - σ * A_xdiff - σ * clamp(inv(σ) * y - A_xdiff, -uc, -lc)
-
-	#state.stats.kkt_passes += 1
-	# other updates
-	copy!(sol_avg_last, sol_avg)
-    LinearAlgebra.axpby!(
-        η / (η + η_sum), sol,
-        η_sum / (η + η_sum), sol_avg
-    )
-    #step_sizes.η_sum += η
-	#CoolPDLP.add_inner!(state.iteration)
-	return η_sum + η
-end
-
-# ╔═╡ 77a7833e-3ffa-4fd8-ba18-9d3a7ea0ca38
-function CoolPDLP.solve!(
-        state::CoolPDLP.PDLPState,
-        milp::MILP{<:Number, <:ConcreteRArray},
-        algo::CoolPDLP.Algorithm{:PDLP}
-    )
-    #prog = CoolPDLP.ProgressUnknown(desc = "PDLP iterations:", enabled = algo.generic.show_progress)
-    (; η, η_sum, ω) = state.step_sizes
-    step! = @compile _step!(state, milp, Reactant.ConcreteRNumber(η), Reactant.ConcreteRNumber(η_sum), Reactant.ConcreteRNumber(ω))
-    kkt_errors! = @compile CoolPDLP.kkt_errors!(state.scratch, state.sol, milp)
-    primal_weight_update! = @compile CoolPDLP.primal_weight_update!(
-        state.scratch, state.step_sizes, state.sol, state.sol_restart, algo.step_size
-    )
-    while true
-        for _ in 1:algo.generic.check_every
-        	# switch pointers
-        	state.sol, state.sol_last = state.sol_last, state.sol
-            state.step_sizes.η_sum = step!(state, milp, Reactant.ConcreteRNumber(η), Reactant.ConcreteRNumber(η_sum), Reactant.ConcreteRNumber(ω))
-            state.stats.kkt_passes += 1
-	        CoolPDLP.add_inner!(state.iteration)
-            #CoolPDLP.next!(prog; showvalues = prog_showvalues(state))
-        end
-        if CoolPDLP.termination_check!(state, milp, algo, kkt_errors!)
-            break
-        elseif CoolPDLP.restart_check!(state, milp, algo, kkt_errors!)
-            CoolPDLP.restart!(state, algo, primal_weight_update!)
-        end
-    end
-    #CoolPDLP.finish!(prog)
-    return state
-end
+solve(milp, PDLP(
+    Float32,  # desired float type
+    Int32,  # desired int type
+    CuSparseMatrixCSR,  # GPU sparse matrix type
+    backend = CUDABackend(),
+    time_limit = 100.0,#00.0,
+    max_kkt_passes = 10^6,
+    termination_reltol = 1e-4,
+))
 
 # ╔═╡ f0178e50-93c2-487a-a317-89d9f63d8f85
 Preferences.set_preferences!(CoolPDLP, "dispatch_doctor_mode" => "disable"; export_prefs = true)

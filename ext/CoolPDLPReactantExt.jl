@@ -2,8 +2,8 @@ module CoolPDLPReactantExt
 
 using Reactant, CoolPDLP, LinearAlgebra, KernelAbstractions, Adapt
 
-CoolPDLP.fixed_stepsize(milp::MILP{<:Number, <:ConcreteRArray}, params::CoolPDLP.StepSizeParameters) = CoolPDLP.fixed_stepsize(adapt(CUDABackend(), milp), params)
-CoolPDLP.primal_weight_init(milp::MILP{<:Number, <:ConcreteRArray}, params::CoolPDLP.StepSizeParameters) = CoolPDLP.primal_weight_init(adapt(CUDABackend(), milp), params)
+CoolPDLP.fixed_stepsize(milp::MILP{<:Number, <:ConcreteRArray}, params::CoolPDLP.StepSizeParameters) = CoolPDLP.fixed_stepsize(adapt(CPU(), milp), params)
+CoolPDLP.primal_weight_init(milp::MILP{<:Number, <:ConcreteRArray}, params::CoolPDLP.StepSizeParameters) = CoolPDLP.primal_weight_init(adapt(CPU(), milp), params)
 
 function CoolPDLP.termination_check!(
         state::CoolPDLP.AbstractState,
@@ -54,6 +54,38 @@ function CoolPDLP.restart_check!(
     restart_stats.err_restart = kkt_errors!(scratch, sol_restart, milp)
 
     return CoolPDLP.should_restart(restart_stats, step_sizes, iteration, algo.restart)
+end
+
+function _step!(state, milp, η, η_sum, ω)
+	# switch pointers
+	#state.sol, state.sol_last = state.sol_last, state.sol
+
+	(; sol, sol_last, sol_avg, sol_avg_last, step_sizes, scratch) = state
+	(; x, y) = sol_last
+	#(; η, ω) = step_sizes
+	(; c, lv, uv, A, At, lc, uc) = milp
+
+	τ, σ = η / ω, η * ω
+
+	# xp = clamp.(x - τ * (c - At * y), lv, uv)
+	At_y = mul!(scratch.x, At, y)
+	@. sol.x = clamp(x - τ * (c - At_y), lv, uv)
+	xdiff = @. scratch.x = 2sol.x - x
+
+	# yp = y - σ * A * (2xp - x) - σ * clamp.(inv(σ) * y - A * (2xp - x), -uc, -lc)
+	A_xdiff = mul!(scratch.y, A, xdiff)
+	@. sol.y = y - σ * A_xdiff - σ * clamp(inv(σ) * y - A_xdiff, -uc, -lc)
+
+	#state.stats.kkt_passes += 1
+	# other updates
+	copy!(sol_avg_last, sol_avg)
+    LinearAlgebra.axpby!(
+        η / (η + η_sum), sol,
+        η_sum / (η + η_sum), sol_avg
+    )
+    #step_sizes.η_sum += η
+	#CoolPDLP.add_inner!(state.iteration)
+	return η_sum + η
 end
 
 function CoolPDLP.solve!(
@@ -156,7 +188,7 @@ function LinearAlgebra.axpby!(
     ax = Reactant.@opcall multiply(x, Reactant.broadcast_to_size(α, size(x)))
     by = Reactant.@opcall multiply(y, Reactant.broadcast_to_size(β, size(y)))
 
-    Reactant.set_mlir_data!(y, Reactant.get_mlir_data(Reactant.@opcall add(ax, by)))
+    Reactant.TracedUtils.set_mlir_data!(y, Reactant.TracedUtils.get_mlir_data(Reactant.@opcall add(ax, by)))
     return y
 end
 

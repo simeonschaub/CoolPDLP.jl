@@ -1,11 +1,5 @@
 using Reactant, CoolPDLP, LinearAlgebra, KernelAbstractions, Adapt
 
-struct MyReactantBackend <: KernelAbstractions.GPU end
-Adapt.adapt_storage(::MyReactantBackend, a) = Reactant.to_rarray(a)
-KernelAbstractions.get_backend(::JAXSparseMatrixCSR) = MyReactantBackend()
-KernelAbstractions.allocate(::MyReactantBackend, T::Type, size::Tuple) = ConcreteRArray{T}(undef, size...)
-Reactant.@reactant_overlay KernelAbstractions.allocate(::MyReactantBackend, ::Type{Reactant.TracedRNumber{T}}, size::NTuple{N}) where {T, N} = Reactant.TracedRArray{T, N}((), nothing, size)
-
 CoolPDLP.fixed_stepsize(milp::MILP{<:Number, <:ConcreteRArray}, params::CoolPDLP.StepSizeParameters) = CoolPDLP.fixed_stepsize(adapt(CUDABackend(), milp), params)
 CoolPDLP.primal_weight_init(milp::MILP{<:Number, <:ConcreteRArray}, params::CoolPDLP.StepSizeParameters) = CoolPDLP.primal_weight_init(adapt(CUDABackend(), milp), params)
 

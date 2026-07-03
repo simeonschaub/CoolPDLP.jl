@@ -65,23 +65,6 @@ def spmv(_A, _b, m):
 	return _spmv((I, J, V), b, m)
 """ => spmv
 
-# ╔═╡ 23247f32-ed39-4c72-b90a-944c30c8e847
-spmm(A, B) = mapslices(b -> spmv(A, b), B; dims = 1)
-
-# ╔═╡ c3e3ee37-18c4-4065-9408-7a3860af2919
-# ╠═╡ disabled = true
-#=╠═╡
-f2 = @compile sync = true spmm((Int32.(A.colval), Int32.(A.rowptr), A.nzval), Reactant.to_rarray(CUDA.rand(10000, 1000)))
-  ╠═╡ =#
-
-# ╔═╡ 01f62c77-5d7e-4d70-8784-57495f0ddf3f
-# ╠═╡ disabled = true
-#=╠═╡
-let (A, B) = ((Int32.(A.colval), Int32.(A.rowptr), A.nzval), Reactant.to_rarray(CUDA.rand(10000, 1000)))
-	Reactant.@time f2(A, B)
-end
-  ╠═╡ =#
-
 # ╔═╡ 3d8a5324-3193-4f86-ac4e-f57e189f2b5b
 begin
 	struct JAXSparseMatrixCSR{T, I, VI <: AbstractVector{I}, VT <: AbstractVector{T}} <: AbstractSparseMatrix{T, I}
@@ -154,7 +137,7 @@ function Reactant.TracedLinearAlgebra.overloaded_mul!(
 end
 
 # ╔═╡ 33cb78ab-82eb-4b46-ac0e-934f7cfb3430
-prob = read_dimacs_mcf("/home/simeon/Downloads/test5.dimacs")
+prob = read_dimacs_mcf("/home/simeon.schaub/test5.dimacs")
 
 (; g, supply, cap_lo, cap_hi, cost) = prob
 
@@ -208,7 +191,7 @@ b_test = rand(500000)
 SparseMatrixCSC{Int8}(JDSMatrixPM([2, -1, 3, -4, 3], Base.OneTo(4), [1, 4, 6], 3))
 
 # ╔═╡ 84d1b460-330d-44fa-8c62-de1df60dc6ee
-A_lp, l = construct_constraint_matrix(prob)
+A_lp, l = construct_constraint_matrix(prob);
 
 u = copy(l)
 
@@ -255,65 +238,6 @@ begin
 	KernelAbstractions.get_backend(::JAXSparseMatrixCSR) = MyReactantBackend()
 	KernelAbstractions.allocate(::MyReactantBackend, T::Type, size::Tuple) = ConcreteRArray{T}(undef, size...)
 	Reactant.@reactant_overlay KernelAbstractions.allocate(::MyReactantBackend, ::Type{Reactant.TracedRNumber{T}}, size::NTuple{N}) where {T, N} = Reactant.TracedRArray{T, N}((), nothing, size)
-end
-
-# ╔═╡ a728eee3-1c6e-4763-b0dd-9ee639f3a031
-function LinearAlgebra.mul!(c::AbstractVector{T}, A::JDSMatrixPM, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number}
-	backend = get_backend(c)
-	α_is_one = isone(α)
-	β_is_zero = iszero(β)
-	if α_is_one && β_is_zero
-		jds_spmv!(backend)(c, A, b, One(), Zero(); ndrange = length(c))
-	elseif α_is_one
-		jds_spmv!(backend)(c, A, b, One(), β; ndrange = length(c))
-	elseif β_is_zero
-		jds_spmv!(backend)(c, A, b, α, Zero(); ndrange = length(c))
-	else
-		jds_spmv!(backend)(c, A, b, α, β; ndrange = length(c))
-	end
-	return c
-end
-
-# ╔═╡ 8e60db21-c1a5-4ff9-8cc5-8bd769f7ad75
-function Reactant.TracedLinearAlgebra.overloaded_mul!(
-        c::AbstractVector,
-        A::JDSMatrixPM,
-        b::AbstractVector,
-        α::Number,
-        β::Number
-    )
-    Reactant.call_with_reactant(c, A, b, α, β) do c, A, b, α, β
-    	backend = get_backend(c)
-    	α_is_one = !(α isa Reactant.TracedRNumber) && isone(α)
-		β_is_zero = !(β isa Reactant.TracedRNumber) && iszero(β)
-    	if α_is_one && β_is_zero
-    		jds_spmv!(backend)(c, A, b, One(), Zero(); ndrange = length(c))
-    	elseif α_is_one
-    		jds_spmv!(backend)(c, A, b, One(), β; ndrange = length(c))
-    	elseif β_is_zero
-    		jds_spmv!(backend)(c, A, b, α, Zero(); ndrange = length(c))
-    	else
-    		jds_spmv!(backend)(c, A, b, α, β; ndrange = length(c))
-    	end
-    	return c
-    end
-end
-
-# ╔═╡ 9f9c6e6e-ec58-4079-b783-5e05ac12ecbe
-function LinearAlgebra.mul!(c::AbstractVector{T}, A::Matrix2PerColPM, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number}
-	backend = get_backend(c)
-	α_is_one = isone(α)
-	β_is_zero = iszero(β)
-	if α_is_one && β_is_zero
-		two_per_col_spmv!(backend)(c, A, b, One(), Zero(); ndrange = length(c))
-	elseif α_is_one
-		two_per_col_spmv!(backend)(c, A, b, One(), β; ndrange = length(c))
-	elseif β_is_zero
-		two_per_col_spmv!(backend)(c, A, b, α, Zero(); ndrange = length(c))
-	else
-		two_per_col_spmv!(backend)(c, A, b, α, β; ndrange = length(c))
-	end
-	return c
 end
 
 # ╔═╡ f2833b6b-9d13-4068-ae52-beea8e6ffec0

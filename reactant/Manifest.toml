@@ -672,7 +672,7 @@ uuid = "0b3b1443-0f03-428d-bdfb-f27f9c1191ea"
 version = "0.1.15"
 
 [[deps.MinimumCostFlows]]
-deps = ["Adapt", "AutoHashEquals", "Graphs", "JuMP", "KernelAbstractions", "LEMONGraphs", "LEMON_jll", "LinearAlgebra", "SparseArrays"]
+deps = ["Adapt", "AutoHashEquals", "Graphs", "JuMP", "KernelAbstractions", "LEMONGraphs", "LEMON_jll", "LinearAlgebra", "SIMD", "SparseArrays"]
 path = "../../MinimumCostFlows"
 uuid = "045fb0ea-6897-4186-8301-f65f7e556b4f"
 version = "1.0.0-DEV"

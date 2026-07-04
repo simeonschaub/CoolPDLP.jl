@@ -29,9 +29,9 @@ Base.inv(prec::Preconditioner) = Preconditioner(inv(prec.D1), inv(prec.D2))
 
 $(TYPEDFIELDS)
 """
-struct ConstraintMatrix{T <: Number, Ti <: Integer, M <: AbstractSparseMatrix{T, Ti}}
+struct ConstraintMatrix{T <: Number, Ti <: Integer, M <: AbstractSparseMatrix{T, Ti}, Mt <: AbstractSparseMatrix{T, Ti}}
     A::M
-    At::M
+    At::Mt
 end
 
 function precondition(cons::ConstraintMatrix, prec::Preconditioner)

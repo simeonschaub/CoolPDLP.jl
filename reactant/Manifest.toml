@@ -688,9 +688,10 @@ deps = ["Adapt", "AutoHashEquals", "Graphs", "JuMP", "KernelAbstractions", "LEMO
 path = "../../MinimumCostFlows"
 uuid = "045fb0ea-6897-4186-8301-f65f7e556b4f"
 version = "1.0.0-DEV"
-weakdeps = ["Reactant"]
+weakdeps = ["CoolPDLP", "Reactant"]
 
     [deps.MinimumCostFlows.extensions]
+    CoolPDLPExt = ["CoolPDLP"]
     ReactantExt = ["Reactant"]
 
 [[deps.MozillaCACerts_jll]]

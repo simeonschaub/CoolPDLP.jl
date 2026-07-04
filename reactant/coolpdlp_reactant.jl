@@ -221,12 +221,14 @@ milp = MILP(;
 
 # ╔═╡ 8b469c37-29b6-4fa2-84e8-4c30292360b4
 milp = MILP(;
-	c = (Float32.(nonzeros(cost))),
-	lv = (Float32.(nonzeros(cap_lo))),
-	uv = (Float32.(nonzeros(cap_hi))),
-	A = SparseMatrixCSC{Float32}(A_lp),
-	lc = (Float32.(l)),
-	uc = (Float32.(u)),
+	c = Float32.(nonzeros(cost)),
+	lv = Float32.(nonzeros(cap_lo)),
+	uv = Float32.(nonzeros(cap_hi)),
+	#A = SparseMatrixCSC{Float32}(A_lp),
+	A = A_lp,
+	At = A_lpt,
+	lc = Float32.(l),
+	uc = Float32.(u),
 );
 
 # ╔═╡ a8cdac0d-b39a-47cc-a0f7-2a5110f34631
@@ -449,6 +451,48 @@ solve(milp, PDLP(
     CuSparseMatrixCSR,  # GPU sparse matrix type
     backend = CUDABackend(),
     time_limit = 100.0,#00.0,
+    max_kkt_passes = 10^6,
+    termination_reltol = 1e-4,
+))
+
+begin
+	struct Bar <: AbstractMatrix{Float32} end
+	function CoolPDLP.set_matrix_type(::Type{Bar}, milp::MILP)
+	    (;
+            c, lv, uv, A, At, lc, uc, D1, D2,
+            int_var, var_names, dataset, name, path,
+        ) = milp
+		@show typeof(A), typeof(At)
+        A_M = adapt(CUDABackend(), A)
+        At_M = adapt(CUDABackend(), At)
+        #backend = MyReactantBackend()
+        backend = CUDABackend()
+
+        return MILP(;
+            c = adapt(backend, c),
+            lv = adapt(backend, lv),
+            uv = adapt(backend, uv),
+            A = A_M,
+            At = At_M,
+            lc = adapt(backend, lc),
+            uc = adapt(backend, uc),
+            D1 = adapt(backend, D1),
+            D2 = adapt(backend, D2),
+            int_var = adapt(backend, int_var),
+            var_names,
+            dataset,
+            name,
+            path
+        )
+    end
+end
+
+solve(milp, PDLP(
+    Float32,  # desired float type
+    Int32,  # desired int type
+    Bar,  # GPU sparse matrix type
+    backend = CUDABackend(),
+    time_limit = 10.0,#00.0,
     max_kkt_passes = 10^6,
     termination_reltol = 1e-4,
 ))

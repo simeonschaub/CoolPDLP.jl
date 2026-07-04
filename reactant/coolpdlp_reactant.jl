@@ -462,7 +462,6 @@ begin
             c, lv, uv, A, At, lc, uc, D1, D2,
             int_var, var_names, dataset, name, path,
         ) = milp
-		@show typeof(A), typeof(At)
         A_M = adapt(CUDABackend(), A)
         At_M = adapt(CUDABackend(), At)
         #backend = MyReactantBackend()
@@ -492,7 +491,7 @@ solve(milp, PDLP(
     Int32,  # desired int type
     Bar,  # GPU sparse matrix type
     backend = CUDABackend(),
-    time_limit = 10.0,#00.0,
+    time_limit = 100.0,#00.0,
     max_kkt_passes = 10^6,
     termination_reltol = 1e-4,
 ))

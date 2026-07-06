@@ -346,6 +346,20 @@ let b = CuArray{Float32}(b_test[1:100000])
 	c1, c2
 end
 
+let b = CuArray{Float32}(b_test[1:100000])
+	A = adapt(CUDABackend(), Matrix2PerRow(A_lpt))
+	c1 = similar(b, 500000)
+	CUDA.@time for _ in 1:1000
+		mul!(c1, A, b, 1f0, 0f0)
+	end
+	A2 = CuSparseMatrixCSR(SparseMatrixCSC{Float32}(A_lpt))
+	c2 = similar(c1)
+	CUDA.@time for _ in 1:1000
+		mul!(c2, A2, b, 1f0, 0f0)
+	end
+	c1, c2
+end
+
 # ╔═╡ 902133e5-a422-4577-8c09-ecd4550ecc0c
 let b = CuArray{Float32}(b_test)
 	A = adapt(CUDABackend(), A_lp)
@@ -402,16 +416,16 @@ sol, stats = solve(milp, PDLP(
 
 # ╔═╡ a34ee9db-8ea8-4cea-9d6d-bd9fa1f18acb
 begin
-	struct Foo <: AbstractMatrix{Float32} end
-	function CoolPDLP.set_matrix_type(::Type{Foo}, milp::MILP)
+	struct Foo{B} <: AbstractMatrix{Float32} end
+	function CoolPDLP.set_matrix_type(::Type{Foo{B}}, milp::MILP) where {B}
 	    (;
             c, lv, uv, A, At, lc, uc, D1, D2,
             int_var, var_names, dataset, name, path,
         ) = milp
-        A_M = adapt(CUDABackend(), A_lp)
-        At_M = adapt(CUDABackend(), A_lpt)
+        A_M = adapt(B(), A_lp)
+        At_M = adapt(B(), A_lpt)
         #backend = MyReactantBackend()
-        backend = CUDABackend()
+        backend = B()
 
         return MILP(;
             c = adapt(backend, c),
@@ -432,14 +446,11 @@ begin
     end
 end
 
-# ╔═╡ 74795c63-5dd5-4722-b559-16bb4da653de
-CoolPDLP.spectral_norm(K::JDSMatrixPM, Kᵀ::Matrix2PerRowPM) = CoolPDLP.spectral_norm(SparseMatrixCSC{Float32}(adapt(CPU(), K)), SparseMatrixCSC{Float32}(adapt(CPU(), Kᵀ)))
-
 # ╔═╡ 8cda099c-9629-4fcd-9e15-ea93b8a92571
 solve(milp, PDLP(
     Float32,  # desired float type
     Int32,  # desired int type
-    Foo,  # GPU sparse matrix type
+    Foo{CUDABackend},  # GPU sparse matrix type
     backend = CUDABackend(),
     time_limit = 100.0,#00.0,
     max_kkt_passes = 10^6,
@@ -456,16 +467,16 @@ solve(milp, PDLP(
 ))
 
 begin
-	struct Bar <: AbstractMatrix{Float32} end
-	function CoolPDLP.set_matrix_type(::Type{Bar}, milp::MILP)
+	struct Bar{B} <: AbstractMatrix{Float32} end
+	function CoolPDLP.set_matrix_type(::Type{Bar{B}}, milp::MILP{T, <:AbstractVector{T}, <:MinimumCostFlows.JDSMatrix, <:Matrix2PerRow}) where {B, T<:Number}
 	    (;
             c, lv, uv, A, At, lc, uc, D1, D2,
             int_var, var_names, dataset, name, path,
         ) = milp
-        A_M = adapt(CUDABackend(), A)
-        At_M = adapt(CUDABackend(), At)
+        A_M = adapt(B(), A)
+        At_M = adapt(B(), At)
         #backend = MyReactantBackend()
-        backend = CUDABackend()
+        backend = B()
 
         return MILP(;
             c = adapt(backend, c),
@@ -489,8 +500,18 @@ end
 solve(milp, PDLP(
     Float32,  # desired float type
     Int32,  # desired int type
-    Bar,  # GPU sparse matrix type
+    Bar{CUDABackend},  # GPU sparse matrix type
     backend = CUDABackend(),
+    time_limit = 100.0,#00.0,
+    max_kkt_passes = 10^6,
+    termination_reltol = 1e-4,
+))
+
+solve(milp, PDLP(
+    Float32,  # desired float type
+    Int32,  # desired int type
+    Bar{MyReactantBackend},  # GPU sparse matrix type
+    backend = MyReactantBackend(),
     time_limit = 100.0,#00.0,
     max_kkt_passes = 10^6,
     termination_reltol = 1e-4,

@@ -138,7 +138,7 @@ function Reactant.TracedLinearAlgebra.overloaded_mul!(
 end
 
 # ╔═╡ 33cb78ab-82eb-4b46-ac0e-934f7cfb3430
-prob = read_dimacs_mcf("/home/simeon.schaub/test5.dimacs", NativeMCFProblem{Int32, Int32})
+prob = read_dimacs_mcf("/home/simeon.schaub/test4.dimacs", NativeMCFProblem{Int32, Int32})
 
 (; g, supply, cap_lo, cap_hi, cost) = prob
 

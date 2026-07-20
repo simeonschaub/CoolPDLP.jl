@@ -138,7 +138,7 @@ function Reactant.TracedLinearAlgebra.overloaded_mul!(
 end
 
 # ╔═╡ 33cb78ab-82eb-4b46-ac0e-934f7cfb3430
-prob = read_dimacs_mcf("/home/simeon.schaub/test4.dimacs", NativeMCFProblem{Int32, Int32})
+prob = read_dimacs_mcf("/home/simeon.schaub/test5.dimacs", NativeMCFProblem{Int32, Int32})
 
 (; g, supply, cap_lo, cap_hi, cost) = prob
 
@@ -346,18 +346,54 @@ let b = CuArray{Float32}(b_test[1:100000])
 	c1, c2
 end
 
+using BenchmarkTools
+
 let b = CuArray{Float32}(b_test[1:100000])
-	A = adapt(CUDABackend(), Matrix2PerRow(A_lpt))
-	c1 = similar(b, 500000)
-	CUDA.@time for _ in 1:1000
-		mul!(c1, A, b, 1f0, 0f0)
+	A = adapt(CUDABackend(), A_lpt)
+	c = similar(b, 500000)
+	@benchmark CUDA.@sync for _ in 1:1000
+		mul!($c, $A, $b, 1f0, 0f0)
 	end
-	A2 = CuSparseMatrixCSR(SparseMatrixCSC{Float32}(A_lpt))
-	c2 = similar(c1)
-	CUDA.@time for _ in 1:1000
-		mul!(c2, A2, b, 1f0, 0f0)
+end
+
+let b = CuArray{Float32}(b_test[1:100000])
+	A = CuSparseMatrixCSR(SparseMatrixCSC{Float32}(A_lpt))
+	c = similar(b, 500000)
+	@benchmark CUDA.@sync for _ in 1:1000
+		mul!($c, $A, $b, 1f0, 0f0)
 	end
-	c1, c2
+end
+
+let b = CuArray{Float32}(b_test[1:100000, 1:1])
+	A = CuSparseMatrixCSR(SparseMatrixCSC{Float32}(A_lpt))
+	c = similar(b, 500000, 1)
+	@benchmark CUDA.@sync for _ in 1:1000
+		mul!($c, $A, $b, 1f0, 0f0)
+	end
+end
+
+let b = CuArray{Float32}(b_test)
+	A = adapt(CUDABackend(), A_lp)
+	c = similar(b, 100000)
+	@benchmark CUDA.@sync for _ in 1:1000
+		mul!($c, $A, $b, 1f0, 0f0)
+	end
+end
+
+let b = CuArray{Float32}(b_test)
+	A = CuSparseMatrixCSR(SparseMatrixCSC{Float32}(A_lp))
+	c = similar(b, 100000)
+	@benchmark CUDA.@sync for _ in 1:1000
+		mul!($c, $A, $b, 1f0, 0f0)
+	end
+end
+
+let b = CuArray{Float32}(b_test[1:500000, 1:1])
+	A = CuSparseMatrixCSR(SparseMatrixCSC{Float32}(A_lp))
+	c = similar(b, 100000, 1)
+	@benchmark CUDA.@sync for _ in 1:1000
+		mul!($c, $A, $b, 1f0, 0f0)
+	end
 end
 
 # ╔═╡ 902133e5-a422-4577-8c09-ecd4550ecc0c

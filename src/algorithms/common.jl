@@ -179,7 +179,7 @@ function initialize end
 """
     solve(milp, sol, algo)
     solve(milp, algo)
-    
+
 Solve the continuous relaxation of `milp` starting from solution `sol` using the algorithm defined by `algo`.
 
 Return a couple `(sol, stats)` where `sol` is the last solution and `stats` contains convergence information.

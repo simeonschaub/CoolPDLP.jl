@@ -9,19 +9,10 @@ end
 using LinearAlgebra, SparseArrays
 
 # ╔═╡ ca7de5ac-4e1b-438f-a41e-91382f244921
-using CUDA, cuSPARSE, Adapt
-
-# ╔═╡ 56556686-1ae2-4721-ae85-119b4163eb8c
-using KernelAbstractions
+using CUDA, cuSPARSE
 
 # ╔═╡ 32f56903-e7fb-4372-99fe-9baf9c3372e7
 using Graphs
-
-# ╔═╡ 38ccebad-dcdb-470a-9acf-abbd31b2ba77
-using SIMD
-
-# ╔═╡ cd8f43a4-09d4-4c60-ab60-423249f7c2a0
-using Preferences
 
 prob = read_dimacs_mcf("/home/simeon.schaub/min-cost-flow/road/road_flow_07_TX_" .* ('a':'e') .* ".min.gz", NativeMCFProblem{Int32, Int32})
 
@@ -36,60 +27,8 @@ b_test_left = rand(size(A_lp, 1))
 
 A_lpt = Matrix2PerRowPM(A_lp');
 
-using GPUToolbox: i32
-using MinimumCostFlows: One, Zero
-
-function two_per_col_spmv!(c::AbstractVector{T}, (; colidx)::Matrix2PerRowPM{I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
-    i = (blockIdx().x - 1i32) * blockDim().x + threadIdx().x
-    @inbounds @fastmath if i <= length(c) ÷ 2
-        ptr = reinterpret(Core.LLVMPtr{NTuple{4, Base.VecElement{I}}, AS.Global}, pointer(colidx))
-        j = SIMD.Vec(CUDA.unsafe_cached_load(ptr, i))
-        bⱼ = vgathera((pointer(b, 0i32)) + j * Int32(sizeof(T)))
-
-        l = shufflevector(bⱼ, Val((0, 1)))
-        sl = sum(SIMD.Vec{2, T}((1, -1)) * l)
-        c[i] = α * sl + β * c[i]
-        u = shufflevector(bⱼ, Val((2, 3)))
-        su = sum(SIMD.Vec{2, T}((1, -1)) * u)
-        c[i + 1i32] = α * su + β * c[i + 1i32]
-    end
-    return nothing
-end
-
-function two_per_col_spmv!(c::AbstractVector{T}, (; colidx, vals)::Matrix2PerRow{T, I}, b::AbstractVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
-    i = (blockIdx().x - 1i32) * blockDim().x + threadIdx().x
-    @inbounds @fastmath if i <= length(c) ÷ 2
-        ptr = reinterpret(Core.LLVMPtr{NTuple{4, Base.VecElement{I}}, AS.Global}, pointer(colidx))
-        j = SIMD.Vec(CUDA.unsafe_cached_load(ptr, i))
-        bⱼ = vgathera((pointer(b, 0i32)) + j * Int32(sizeof(T)))
-        val_ptr = reinterpret(Core.LLVMPtr{NTuple{4, Base.VecElement{T}}, AS.Global}, pointer(vals))
-        val = SIMD.Vec(CUDA.unsafe_cached_load(val_ptr, i))
-        prod = val * bⱼ
-
-        sl = sum(shufflevector(prod, Val((0, 1))))
-        c[i] = α * sl + β * c[i]
-        su = sum(shufflevector(prod, Val((2, 3))))
-        c[i + 1i32] = α * su + β * c[i + 1i32]
-    end
-    return nothing
-end
-
-function LinearAlgebra.mul!(c::CuVector{T}, A::Union{Matrix2PerRow{T, I}, Matrix2PerRowPM{I}}, b::CuVector{T}, α::Number, β::Number) where {T <: Number, I <: Integer}
-    α_is_one = isone(α)
-    β_is_zero = iszero(β)
-    threads = 768
-    blocks = cld(length(c) ÷ 2, threads)
-    if α_is_one && β_is_zero
-        @cuda threads=threads blocks=blocks two_per_col_spmv!(c, A, b, One(), Zero())
-    elseif α_is_one
-        @cuda threads=threads blocks=blocks two_per_col_spmv!(c, A, b, One(), β)
-    elseif β_is_zero
-        @cuda threads=threads blocks=blocks two_per_col_spmv!(c, A, b, α, Zero())
-    else
-        @cuda threads=threads blocks=blocks two_per_col_spmv!(c, A, b, α, β)
-    end
-    return c
-end
+Base.get_extension(MinimumCostFlows, :CUDAExt)
+which(LinearAlgebra.mul!, (CuVector{Float32}, Matrix2PerRowPM{Int32}, CuVector{Float32}, Float32, Float32))
 
 using BenchmarkTools
 

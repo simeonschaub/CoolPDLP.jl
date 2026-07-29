@@ -695,9 +695,10 @@ deps = ["Adapt", "AutoHashEquals", "GZip", "Graphs", "JuMP", "KernelAbstractions
 path = "../../MinimumCostFlows"
 uuid = "045fb0ea-6897-4186-8301-f65f7e556b4f"
 version = "1.0.0-DEV"
-weakdeps = ["CoolPDLP", "Reactant"]
+weakdeps = ["CUDA", "CoolPDLP", "GPUToolbox", "Reactant"]
 
     [deps.MinimumCostFlows.extensions]
+    CUDAExt = ["CUDA", "GPUToolbox", "SIMD"]
     CoolPDLPExt = ["CoolPDLP"]
     ReactantExt = ["Reactant"]
 
